@@ -10,7 +10,7 @@
 #include "queue.h"
 #include <string.h>
 #include <sys/types.h>
-#include <sys/wait.h>
+//#include <sys/wait.h>
 
 typedef struct {
     int product_id;
@@ -23,40 +23,53 @@ int main (int argc, const char * argv[])
   int profits = 0;
   int product_stock [5] = {0};
 
-  // BEGIN CHANGES: Parsing input parameters and preparing data structures
-  if(argc < 5) {
-    fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
-    return EXIT_FAILURE;
-  }
+  // Purchase costs and selling prices
+    int purchase_costs[5] = {2, 5, 15, 25, 100};
+    int selling_prices[5] = {3, 10, 20, 40, 125};
 
-  const char* filename = argv[1];
-  int num_producers = atoi(argv[2]);
-  int num_consumers = atoi(argv[3]);
-  int buff_size = atoi(argv[4]);
+    if(argc < 5) {
+        fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-  FILE *file = fopen(filename, "r");
-  if (!file) {
-    perror("Failed to open file");
-    return EXIT_FAILURE;
-  }
+    const char* filename = argv[1];
+    int num_producers = atoi(argv[2]);
+    int num_consumers = atoi(argv[3]);
+    int buff_size = atoi(argv[4]);
 
-  int operations_count;
-  fscanf(file, "%d", &operations_count); // Read the number of operations
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror("Failed to open file");
+        return EXIT_FAILURE;
+    }
 
-  operation_data *operations = malloc(operations_count * sizeof(operation_data));
-  if (!operations) {
-    perror("Failed to allocate memory for operations");
+    int operations_count;
+    fscanf(file, "%d", &operations_count);
+
+    operation_data *operations = malloc(operations_count * sizeof(operation_data));
+    if (!operations) {
+        perror("Failed to allocate memory for operations");
+        fclose(file);
+        return EXIT_FAILURE;
+    }
+
+    for(int i = 0; i < operations_count; i++) {
+        fscanf(file, "%d %s %d", &operations[i].product_id, operations[i].operation_type, &operations[i].units);
+    }
+
     fclose(file);
-    return EXIT_FAILURE;
-  }
 
-  // Reading operation data from the file
-  for(int i = 0; i < operations_count; i++) {
-    fscanf(file, "%d %s %d", &operations[i].product_id, operations[i].operation_type, &operations[i].units);
-  }
+    // Processing each operation
+    for (int i = 0; i < operations_count; i++) {
+        int product_index = operations[i].product_id - 1; // Product ID to array index (1-based to 0-based)
 
-  fclose(file);
-  // END CHANGES
+        if (strcmp(operations[i].operation_type, "PURCHASE") == 0) {
+            product_stock[product_index] += operations[i].units;
+        } else if (strcmp(operations[i].operation_type, "SALE") == 0) {
+            product_stock[product_index] -= operations[i].units;
+            profits += operations[i].units * (selling_prices[product_index] - purchase_costs[product_index]);
+        }
+    }
 
 
   // Output
