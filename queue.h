@@ -12,6 +12,14 @@ struct element {
 
 typedef struct queue {
   // Define the struct yourself
+  struct element *elements;  // Array of elements
+  int capacity;              // Maximum number of items in the queue
+  int front;                 // Index of the front element
+  int rear;                  // Index of the last element
+  int count;                 // Current size of the queue
+  pthread_mutex_t lock;      // Mutex for protecting the queue
+  pthread_cond_t not_empty;  // Condition variable for empty states
+  pthread_cond_t not_full;
   int param1;
 }queue;
 
