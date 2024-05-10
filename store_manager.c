@@ -55,7 +55,7 @@ int main(int argc, const char * argv[]) {
     // Launch producer threads
     pthread_t producers[num_producers];
     for (int i = 0; i < num_producers; i++) {
-        pthread_create(&producers[i], NULL, producer, (void *)&num_operations);
+        pthread_create(&producers[i], NULL, producer, (void *)file);
     }
 
     // Launch consumer threads
@@ -67,6 +67,12 @@ int main(int argc, const char * argv[]) {
     // Wait for all producer threads to finish
     for (int i = 0; i < num_producers; i++) {
         pthread_join(producers[i], NULL);
+    }
+
+    // Signal consumers to exit
+    for (int i = 0; i < num_consumers; i++) {
+        Operation *shutdown_signal = NULL;  // Use NULL or a special shutdown operation
+        queue_put(q, shutdown_signal);
     }
 
     // Wait for all consumer threads to finish
@@ -91,12 +97,10 @@ int main(int argc, const char * argv[]) {
 }
 
 void *producer(void *arg) {
-    int *num_operations = (int *)arg;
-
-    for (int i = 0; i < *num_operations; i++) {
-        char line[MAX_FILENAME_LENGTH];
-        fgets(line, MAX_FILENAME_LENGTH, stdin);
-
+    FILE *file = (FILE *)arg;
+    char line[MAX_FILENAME_LENGTH];
+    
+    while (fgets(line, MAX_FILENAME_LENGTH, file) != NULL) {
         Operation *op = parse_operation(line);
         queue_put(q, op);
     }
@@ -105,9 +109,11 @@ void *producer(void *arg) {
 }
 
 void *consumer(void *arg) {
+    Operation *op;
+    
     while (1) {
-        Operation *op = queue_get(q);
-        if (!op) break;
+        op = queue_get(q);
+        if (op == NULL) break; // Assuming NULL is pushed to the queue when producers are done.
 
         process_operation(op);
         free(op);

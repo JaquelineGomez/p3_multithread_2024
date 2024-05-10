@@ -66,11 +66,16 @@ int queue_put(queue *q, Operation *op) {
         pthread_cond_wait(&q->full, &q->mutex);
     }
 
-    q->rear = (q->rear + 1) % q->size;
-    q->buffer[q->rear] = *op;
-    q->count++;
-
-    pthread_cond_signal(&q->empty);
+    if (op == NULL) {
+        // If shutdown signal, don't actually insert it but wake all waiting consumers
+        pthread_cond_broadcast(&q->empty);
+    } else {
+        q->rear = (q->rear + 1) % q->size;
+        q->buffer[q->rear] = *op;
+        q->count++;
+        pthread_cond_signal(&q->empty);  // Signal that the queue is no longer empty
+    }
+    
     pthread_mutex_unlock(&q->mutex);
     return 0;
 }
@@ -85,7 +90,7 @@ Operation *queue_get(queue *q) {
     q->front = (q->front + 1) % q->size;
     q->count--;
 
-    pthread_cond_signal(&q->full);
+    pthread_cond_signal(&q->full);  // Signal that the queue is no longer full
     pthread_mutex_unlock(&q->mutex);
     return op;
 }
