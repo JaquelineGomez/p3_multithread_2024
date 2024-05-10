@@ -99,10 +99,17 @@ int main(int argc, const char * argv[]) {
 void *producer(void *arg) {
     FILE *file = (FILE *)arg;
     char line[MAX_FILENAME_LENGTH];
-    
+
     while (fgets(line, MAX_FILENAME_LENGTH, file) != NULL) {
         Operation *op = parse_operation(line);
-        queue_put(q, op);
+        if (op) {
+            queue_put(q, op);
+            free(op); // If your queue is storing copies, free the op here after putting it in the queue
+        }
+    }
+
+    for (int i = 0; i < num_consumers; i++) {
+        queue_put(q, NULL); // Send a shutdown signal for each consumer
     }
 
     pthread_exit(NULL);
@@ -126,11 +133,11 @@ Operation* parse_operation(const char *line) {
     Operation *op = (Operation *)malloc(sizeof(Operation));
     if (!op) {
         perror("Error allocating memory for operation");
-        exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE); // Consider returning NULL instead of exiting to handle error gracefully in calling function
     }
 
     int scanCount = sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
-    if (scanCount != 3) { // Ensure that we correctly parse three items
+    if (scanCount != 3) {
         fprintf(stderr, "Failed to parse operation: %s\n", line);
         free(op);
         return NULL;

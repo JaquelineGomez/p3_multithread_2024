@@ -66,16 +66,15 @@ int queue_put(queue *q, Operation *op) {
         pthread_cond_wait(&q->full, &q->mutex);
     }
 
-    if (op == NULL) {
-        // If shutdown signal, don't actually insert it but wake all waiting consumers
+    if (op == NULL) { // This block might be unnecessary if you manage shutdown signals differently
         pthread_cond_broadcast(&q->empty);
     } else {
         q->rear = (q->rear + 1) % q->size;
-        q->buffer[q->rear] = *op;
+        memcpy(&q->buffer[q->rear], op, sizeof(Operation)); // Use memcpy to avoid pointer aliasing
         q->count++;
         pthread_cond_signal(&q->empty);  // Signal that the queue is no longer empty
     }
-    
+
     pthread_mutex_unlock(&q->mutex);
     return 0;
 }
