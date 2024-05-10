@@ -21,12 +21,14 @@ int profits = 0;
 int product_stock[5] = {0};
 int purchase_prices[5] = {2, 5, 15, 25, 100}; // Purchase cost per unit
 int sale_prices[5] = {3, 10, 20, 40, 125};     // Sales price per unit
+int num_consumers;
 queue *q;
 // Function prototypes
 void *producer(void *arg);
 void *consumer(void *arg);
 
 int main(int argc, const char * argv[]) {
+    num_consumers = atoi(argv[3]);
     if (argc != 5) {
         fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
         return EXIT_FAILURE;
