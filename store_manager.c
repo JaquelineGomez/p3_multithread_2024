@@ -9,10 +9,13 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
 #define MAX_FILENAME_LENGTH 256
+
 // Function prototypes
 Operation* parse_operation(const char *line);
 void process_operation(Operation *op);
+
 // Global variables
 int profits = 0;
 int product_stock[5] = {0};
@@ -22,62 +25,77 @@ queue *q;
 // Function prototypes
 void *producer(void *arg);
 void *consumer(void *arg);
+
 int main(int argc, const char * argv[]) {
     if (argc != 5) {
         fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
         return EXIT_FAILURE;
     }
+
     // Parse command line arguments
     const char *filename = argv[1];
     int num_producers = atoi(argv[2]);
     int num_consumers = atoi(argv[3]);
     int buff_size = atoi(argv[4]);
+
     // Open file
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("Error opening file");
         return EXIT_FAILURE;
     }
+
     // Read number of operations
     int num_operations;
     fscanf(file, "%d", &num_operations);
+
     // Initialize queue
     q = queue_init(buff_size);
+
     // Launch producer threads
     pthread_t producers[num_producers];
     for (int i = 0; i < num_producers; i++) {
         pthread_create(&producers[i], NULL, producer, (void *)file);
     }
+
     // Launch consumer threads
     pthread_t consumers[num_consumers];
     for (int i = 0; i < num_consumers; i++) {
         pthread_create(&consumers[i], NULL, consumer, NULL);
     }
+
     // Wait for all producer threads to finish
     for (int i = 0; i < num_producers; i++) {
         pthread_join(producers[i], NULL);
     }
+
     // Signal consumers to exit
     for (int i = 0; i < num_consumers; i++) {
         Operation *shutdown_signal = NULL;  // Use NULL or a special shutdown operation
         queue_put(q, shutdown_signal);
     }
+
     // Wait for all consumer threads to finish
     for (int i = 0; i < num_consumers; i++) {
         pthread_join(consumers[i], NULL);
     }
+
     // Output profit and stock
     printf("Total: %d euros\n", profits);
     printf("Stock:\n");
     for (int i = 0; i < 5; i++) {
         printf("  Product %d: %d\n", i + 1, product_stock[i]);
     }
+
     // Destroy queue
     queue_destroy(q);
+
     // Close file
     fclose(file);
+
     return EXIT_SUCCESS;
 }
+
 void *producer(void *arg) {
     FILE *file = (FILE *)arg;
     char line[MAX_FILENAME_LENGTH];
@@ -86,19 +104,24 @@ void *producer(void *arg) {
         Operation *op = parse_operation(line);
         queue_put(q, op);
     }
+
     pthread_exit(NULL);
 }
+
 void *consumer(void *arg) {
     Operation *op;
     
     while (1) {
         op = queue_get(q);
         if (op == NULL) break; // Assuming NULL is pushed to the queue when producers are done.
+
         process_operation(op);
         free(op);
     }
+
     pthread_exit(NULL);
 }
+
 Operation* parse_operation(const char *line) {
     Operation *op = (Operation *)malloc(sizeof(Operation));
     if (!op) {
@@ -106,7 +129,6 @@ Operation* parse_operation(const char *line) {
         exit(EXIT_FAILURE);
     }
 
-    sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
     int scanCount = sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
     if (scanCount != 3) { // Ensure that we correctly parse three items
         fprintf(stderr, "Failed to parse operation: %s\n", line);
@@ -126,19 +148,6 @@ void process_operation(Operation *op) {
     int product_id = op->id - 1; // Product id is 1-indexed
     int purchase_cost, sale_price;
 
-    switch (op->op_type[0]) {
-        case 'P':
-            purchase_cost = purchase_prices[product_id] * op->units;
-            profits -= purchase_cost;
-            product_stock[product_id] += op->units;
-            break;
-        case 'S':
-            sale_price = sale_prices[product_id] * op->units;
-            profits += sale_price;
-            product_stock[product_id] -= op->units;
-            break;
-        default:
-            fprintf(stderr, "Invalid operation type\n");
     if (strcmp(op->op_type, "PURCHASE") == 0) {
         purchase_cost = purchase_prices[product_id] * op->units;
         profits -= purchase_cost;
