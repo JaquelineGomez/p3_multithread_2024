@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <pthread.h>
 #include "queue.h"
-
 // Function implementations
 queue* queue_init(int size) {
     queue *q = (queue *)malloc(sizeof(queue));
@@ -11,19 +10,16 @@ queue* queue_init(int size) {
         perror("Error allocating memory for queue");
         exit(EXIT_FAILURE);
     }
-
     q->buffer = (Operation *)malloc(size * sizeof(Operation));
     if (q->buffer == NULL) {
         perror("Error allocating memory for buffer");
         free(q);
         exit(EXIT_FAILURE);
     }
-
     q->size = size;
     q->front = 0;
     q->rear = -1;
     q->count = 0;
-
     if (pthread_mutex_init(&q->mutex, NULL) != 0) {
         perror("Mutex initialization failed");
         free(q->buffer);
@@ -45,10 +41,8 @@ queue* queue_init(int size) {
         free(q);
         exit(EXIT_FAILURE);
     }
-
     return q;
 }
-
 int queue_destroy(queue *q) {
     pthread_mutex_lock(&q->mutex);
     free(q->buffer);
@@ -59,13 +53,17 @@ int queue_destroy(queue *q) {
     free(q);
     return 0;
 }
-
 int queue_put(queue *q, Operation *op) {
     pthread_mutex_lock(&q->mutex);
     while (queue_full(q)) {
         pthread_cond_wait(&q->full, &q->mutex);
     }
 
+    q->rear = (q->rear + 1) % q->size;
+    q->buffer[q->rear] = *op;
+    q->count++;
+
+    pthread_cond_signal(&q->empty);
     if (op == NULL) {
         // If shutdown signal, don't actually insert it but wake all waiting consumers
         pthread_cond_broadcast(&q->empty);
@@ -75,30 +73,27 @@ int queue_put(queue *q, Operation *op) {
         q->count++;
         pthread_cond_signal(&q->empty);  // Signal that the queue is no longer empty
     }
-    
+
     pthread_mutex_unlock(&q->mutex);
     return 0;
 }
-
 Operation *queue_get(queue *q) {
     pthread_mutex_lock(&q->mutex);
     while (queue_empty(q)) {
         pthread_cond_wait(&q->empty, &q->mutex);
     }
-
     Operation *op = &q->buffer[q->front];
     q->front = (q->front + 1) % q->size;
     q->count--;
 
+    pthread_cond_signal(&q->full);
     pthread_cond_signal(&q->full);  // Signal that the queue is no longer full
     pthread_mutex_unlock(&q->mutex);
     return op;
 }
-
 int queue_empty(queue *q) {
     return (q->count == 0);
 }
-
 int queue_full(queue *q) {
     return (q->count == q->size);
 }
