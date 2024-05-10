@@ -8,7 +8,7 @@
 #include "queue.h"
 #include <string.h>
 #include <sys/types.h>
-//#include <sys/wait.h>
+#include <sys/wait.h>
 
 #define MAX_FILENAME_LENGTH 256
 
@@ -68,7 +68,9 @@ int main(int argc, const char * argv[]) {
     // Read operations into array
     char line[MAX_FILENAME_LENGTH];
     int actual_operations_read = 0;
-    for (int i = 0; i < num_operations && fgets(line, MAX_FILENAME_LENGTH, file); i++) {
+    for (int i = 0; i < num_operations && fgets(line, MAX_FILENAME_LENGTH, file); i++) 
+    {
+      printf("\nLINE %d info : %s", i, line);
         Operation *op = parse_operation(line);
         if (op) {
             all_operations[actual_operations_read++] = *op;
@@ -156,8 +158,10 @@ Operation* parse_operation(const char *line) {
     }
 
     int scanCount = sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
+    printf("Scancount %d\n", scanCount);
+
     if (scanCount != 3) { // Ensure that we correctly parse three items
-        fprintf(stderr, "Failed to parse operation: %s\n", line);
+        fprintf(stderr, "Failed to parse operation: %s", line);
         free(op);
         return NULL;
     }
