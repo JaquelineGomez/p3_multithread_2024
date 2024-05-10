@@ -129,7 +129,18 @@ Operation* parse_operation(const char *line) {
         exit(EXIT_FAILURE);
     }
 
-    sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
+    int scanCount = sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
+    if (scanCount != 3) { // Ensure that we correctly parse three items
+        fprintf(stderr, "Failed to parse operation: %s\n", line);
+        free(op);
+        return NULL;
+    }
+    if (strcmp(op->op_type, "PURCHASE") != 0 && strcmp(op->op_type, "SALE") != 0) {
+        fprintf(stderr, "Invalid operation type encountered: %s\n", op->op_type);
+        free(op);
+        return NULL;
+    }
+
     return op;
 }
 
@@ -137,18 +148,15 @@ void process_operation(Operation *op) {
     int product_id = op->id - 1; // Product id is 1-indexed
     int purchase_cost, sale_price;
 
-    switch (op->op_type[0]) {
-        case 'P':
-            purchase_cost = purchase_prices[product_id] * op->units;
-            profits -= purchase_cost;
-            product_stock[product_id] += op->units;
-            break;
-        case 'S':
-            sale_price = sale_prices[product_id] * op->units;
-            profits += sale_price;
-            product_stock[product_id] -= op->units;
-            break;
-        default:
-            fprintf(stderr, "Invalid operation type\n");
+    if (strcmp(op->op_type, "PURCHASE") == 0) {
+        purchase_cost = purchase_prices[product_id] * op->units;
+        profits -= purchase_cost;
+        product_stock[product_id] += op->units;
+    } else if (strcmp(op->op_type, "SALE") == 0) {
+        sale_price = sale_prices[product_id] * op->units;
+        profits += sale_price;
+        product_stock[product_id] -= op->units;
+    } else {
+        fprintf(stderr, "Invalid operation type: %s\n", op->op_type);
     }
 }
