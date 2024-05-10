@@ -45,7 +45,7 @@ void *consumer(void *arg);
 
 int main(int argc, const char * argv[]) {
     int profits = 0;
-    int product_stock[5] = {0}; // Initialize product stock
+    int product_stock[5] = {0,0,0,0,0}; // Initialize product stock
 
     if (argc != 5) {
         fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
@@ -117,8 +117,7 @@ int main(int argc, const char * argv[]) {
         ThreadArgs arg = { .q = q, 
                     .operations = operations, 
                     .start_idx = start_idx, 
-                    .end_idx = end_idx, 
-                    .product_stock = product_stock, 
+                    .end_idx = end_idx, .product_stock = product_stock,
                     .profits = &profits };
         producer_args[i] = arg;
         pthread_create(&producer_threads[i], NULL, producer,&producer_args[i]);
@@ -138,7 +137,7 @@ int main(int argc, const char * argv[]) {
        ThreadArgs arg = { .q = q, 
                     .operations = operations, 
                     .start_idx = start_idx, 
-                    .end_idx = end_idx, 
+                    .end_idx = end_idx,  
                     .product_stock = product_stock, 
                     .profits = &profits };
         consumer_args[i] = arg;
@@ -171,31 +170,20 @@ int main(int argc, const char * argv[]) {
 // Producer thread function
 void *producer(void *args) {
     ThreadArgs *thread_args = (ThreadArgs *)args;
+    // int *product_stock = thread_args->product_stock;
+    // int *profits = thread_args->profits; // Get the pointer to the profits variable
+    queue *q = thread_args->q;
 
     // Extract arguments
     int start_idx = thread_args->start_idx;
     int end_idx = thread_args->end_idx;
     Operation *operations = thread_args->operations;
-    // int *product_stock = thread_args->product_stock;
-    int *profits = thread_args->profits;
 
     // Insert operations into the queue
     for (int i = start_idx; i < end_idx; i++) {
         Operation op = operations[i];
-        
-        // Lock product stock mutex before updating
-        pthread_mutex_lock(&product_stock_mutex);
-        product_stock[op.id - 1] += op.units;
-        printf("%d units %d", op.id, op.units);
-        pthread_mutex_unlock(&product_stock_mutex);
-        
-        // Lock profits mutex before updating
-        pthread_mutex_lock(&profits_mutex);
-        *profits -= (purchase_prices[op.id - 1] * op.units);
-        pthread_mutex_unlock(&profits_mutex);
-        
         // Put operation into the queue
-        queue_put(thread_args->q, &op);
+        queue_put(q, &op);
     }
 
     pthread_exit(NULL);
@@ -204,29 +192,43 @@ void *producer(void *args) {
 // Consumer thread function
 void *consumer(void *args) {
     ThreadArgs *thread_args = (ThreadArgs *)args;
+    int *product_stock = thread_args->product_stock;
+    int *profits = thread_args->profits; // Get the pointer to the profits variable
 
     // Extract arguments
     int start_idx = thread_args->start_idx;
     int end_idx = thread_args->end_idx;
     Operation *operations = thread_args->operations;
-    // int *product_stock = thread_args->product_stock;
-    int *profits = thread_args->profits;
 
     // Process operations from the queue
     for (int i = start_idx; i < end_idx; i++) {
         // Get operation from the queue
         Operation *op = queue_get(thread_args->q);
+        
+        if (strcmp(op->op_type, "SALE") == 0) {
+            // Lock product stock mutex before updating
+            pthread_mutex_lock(&product_stock_mutex);
+            product_stock[op->id - 1] -= op->units;
+            pthread_mutex_unlock(&product_stock_mutex);
 
-        // Lock product stock mutex before updating
-        pthread_mutex_lock(&product_stock_mutex);
-        product_stock[op->id - 1] -= op->units;
-        printf("%d units %d", op->id, op->units);
-        pthread_mutex_unlock(&product_stock_mutex);
+            // Lock profits mutex before updating
+            pthread_mutex_lock(&profits_mutex);
+            *profits += (sale_prices[(op->id) - 1] * op->units);
+            pthread_mutex_unlock(&profits_mutex);
+        }
+         if (strcmp(op->op_type, "PURCHASE") == 0) 
+         {
+            // Lock product stock mutex before updating
+            pthread_mutex_lock(&product_stock_mutex);
+            product_stock[op->id - 1] += op->units;
+            pthread_mutex_unlock(&product_stock_mutex);
 
-        // Lock profits mutex before updating
-        pthread_mutex_lock(&profits_mutex);
-        *profits += (sale_prices[(op->id) - 1] * op->units);
-        pthread_mutex_unlock(&profits_mutex);
+            // Lock profits mutex before updating
+            pthread_mutex_lock(&profits_mutex);
+            *profits -= (purchase_prices[(op->id) - 1] * op->units);
+            pthread_mutex_unlock(&profits_mutex);
+         }
+
     }
 
     pthread_exit(NULL);
