@@ -109,17 +109,19 @@ void *producer(void *arg) {
 }
 
 void *consumer(void *arg) {
+    void *consumer(void *arg) {
     Operation *op;
     
     while (1) {
         op = queue_get(q);
-        if (op == NULL) break; // Assuming NULL is pushed to the queue when producers are done.
+        if (op == NULL) break; // Correctly handle the shutdown signal.
 
         process_operation(op);
-        free(op);
+        free(op); // Make sure no other thread or function accesses `op` after this point.
     }
 
     pthread_exit(NULL);
+    }
 }
 
 Operation* parse_operation(const char *line) {
