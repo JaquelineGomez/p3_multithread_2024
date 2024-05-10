@@ -144,7 +144,10 @@ void *producer(void *arg) {
 void *consumer(void *arg) {
     while (1) {
         Operation *op = queue_get(q);
-        if (op == NULL) break; // Exit loop when NULL is encountered
+        if (op == NULL) {
+            queue_put(q, NULL); // Pass the shutdown signal along if there are multiple consumers
+            break;
+        }
         process_operation(op);
     }
     pthread_exit(NULL);
