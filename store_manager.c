@@ -22,7 +22,8 @@ int product_stock[5] = {0};
 int purchase_prices[5] = {2, 5, 15, 25, 100}; // Purchase cost per unit
 int sale_prices[5] = {3, 10, 20, 40, 125};     // Sales price per unit
 queue *q;
-pthread_mutex_t profits_mutex;
+pthread_mutex_t profits_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t product_stock_mutex = PTHREAD_MUTEX_INITIALIZER;
 // Function prototypes
 void *producer(void *arg);
 void *consumer(void *arg);
@@ -36,6 +37,7 @@ typedef struct {
 
 int main(int argc, const char * argv[]) {
     pthread_mutex_init(&profits_mutex, NULL);
+    pthread_mutex_init(&product_stock_mutex, NULL);
     if (argc != 5) {
         fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
         return EXIT_FAILURE;
@@ -81,54 +83,46 @@ int main(int argc, const char * argv[]) {
     // Initialize queue
     q = queue_init(buff_size);
 
-    // Launch producer threads
     pthread_t producers[num_producers];
-    int operations_per_thread = actual_operations_read / num_producers;
+    OperationSlice slices[num_producers]; // Hold slices in an array to avoid premature free
     for (int i = 0; i < num_producers; i++) {
-        int start_index = i * operations_per_thread;
-        int end_index = (i == num_producers - 1) ? actual_operations_read : (i + 1) * operations_per_thread;
-        OperationSlice *slice = malloc(sizeof(OperationSlice));
-        slice->operations = all_operations;
-        slice->start = start_index;
-        slice->end = end_index;
-        pthread_create(&producers[i], NULL, producer, (void *)slice);
+        int start_index = i * (num_operations / num_producers);
+        int end_index = (i == num_producers - 1) ? num_operations : start_index + (num_operations / num_producers);
+        slices[i] = (OperationSlice){all_operations, start_index, end_index};
+        pthread_create(&producers[i], NULL, producer, &slices[i]);
     }
 
-        // Launch consumer threads
-        pthread_t consumers[num_consumers];
-        for (int i = 0; i < num_consumers; i++) {
-            pthread_create(&consumers[i], NULL, consumer, NULL);
-        }
+    // Launch consumer threads
+    pthread_t consumers[num_consumers];
+    for (int i = 0; i < num_consumers; i++) {
+        pthread_create(&consumers[i], NULL, consumer, NULL);
+    }
 
-        // Wait for all producer threads to finish
-        for (int i = 0; i < num_producers; i++) {
-            pthread_join(producers[i], NULL);
-        }
+    // Wait for all threads to finish
+    for (int i = 0; i < num_producers; i++) {
+        pthread_join(producers[i], NULL);
+    }
 
-        // Signal consumers to exit by pushing NULL operations
-        for (int i = 0; i < num_consumers; i++) {
-            queue_put(q, NULL);
-        }
+    // Signal consumers to exit by pushing NULL operations
+    for (int i = 0; i < num_consumers; i++) {
+        queue_put(q, NULL);
+    }
 
-        // Wait for all consumer threads to finish
-        for (int i = 0; i < num_consumers; i++) {
-            pthread_join(consumers[i], NULL);
-        }
+    for (int i = 0; i < num_consumers; i++) {
+        pthread_join(consumers[i], NULL);
+    }
 
-    // Output profit and stock
+    // Clean up and output results
     printf("Total: %d euros\n", profits);
     printf("Stock:\n");
     for (int i = 0; i < 5; i++) {
         printf("  Product %d: %d\n", i + 1, product_stock[i]);
     }
 
-    // Destroy queue
     free(all_operations);
     queue_destroy(q);
-
-    // Close file
-    fclose(file);
     pthread_mutex_destroy(&profits_mutex);
+    pthread_mutex_destroy(&product_stock_mutex);
     return EXIT_SUCCESS;
 }
 
@@ -137,21 +131,18 @@ void *producer(void *arg) {
     for (int i = slice->start; i < slice->end; i++) {
         queue_put(q, &slice->operations[i]);
     }
-    free(slice);
-    pthread_exit(NULL);
+    return NULL; // Ensure clean exit from thread function
 }
 
 void *consumer(void *arg) {
     while (1) {
         Operation *op = queue_get(q);
-        if (op == NULL) {
-            queue_put(q, NULL); // Pass the shutdown signal along if there are multiple consumers
-            break;
-        }
+        if (op == NULL) break;  // Properly handle NULL signal for shutdown
         process_operation(op);
     }
-    pthread_exit(NULL);
+    return NULL;  // Ensure clean exit from thread function
 }
+
 
 Operation* parse_operation(const char *line) {
     Operation *op = (Operation *)malloc(sizeof(Operation));
