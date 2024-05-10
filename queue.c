@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <pthread.h>
+#include <string.h>
 #include "queue.h"
 
 // Function implementations
