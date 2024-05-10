@@ -1,5 +1,3 @@
-//SSOO-P3 23/24
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,76 +8,141 @@
 #include "queue.h"
 #include <string.h>
 #include <sys/types.h>
-//#include <sys/wait.h>
+#include <sys/wait.h>
 
-typedef struct {
-    int product_id;
-    char operation_type[10]; // Assuming "PURCHASE" or "SALE" as possible operations
-    int units;
-} operation_data;
+#define MAX_FILENAME_LENGTH 256
 
-int main (int argc, const char * argv[])
-{
-  int profits = 0;
-  int product_stock [5] = {0};
+// Function prototypes
+Operation* parse_operation(const char *line);
+void process_operation(Operation *op);
 
-  // Purchase costs and selling prices
-    int purchase_costs[5] = {2, 5, 15, 25, 100};
-    int selling_prices[5] = {3, 10, 20, 40, 125};
+// Global variables
+int profits = 0;
+int product_stock[5] = {0};
+int purchase_prices[5] = {2, 5, 15, 25, 100}; // Purchase cost per unit
+int sale_prices[5] = {3, 10, 20, 40, 125};     // Sales price per unit
+queue *q;
+// Function prototypes
+void *producer(void *arg);
+void *consumer(void *arg);
 
-    if(argc < 5) {
+int main(int argc, const char * argv[]) {
+    if (argc != 5) {
         fprintf(stderr, "Usage: %s <file name> <num producers> <num consumers> <buff size>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    const char* filename = argv[1];
+    // Parse command line arguments
+    const char *filename = argv[1];
     int num_producers = atoi(argv[2]);
     int num_consumers = atoi(argv[3]);
     int buff_size = atoi(argv[4]);
 
+    // Open file
     FILE *file = fopen(filename, "r");
     if (!file) {
-        perror("Failed to open file");
+        perror("Error opening file");
         return EXIT_FAILURE;
     }
 
-    int operations_count;
-    fscanf(file, "%d", &operations_count);
+    // Read number of operations
+    int num_operations;
+    fscanf(file, "%d", &num_operations);
 
-    operation_data *operations = malloc(operations_count * sizeof(operation_data));
-    if (!operations) {
-        perror("Failed to allocate memory for operations");
-        fclose(file);
-        return EXIT_FAILURE;
+    // Initialize queue
+    q = queue_init(buff_size);
+
+    // Launch producer threads
+    pthread_t producers[num_producers];
+    for (int i = 0; i < num_producers; i++) {
+        pthread_create(&producers[i], NULL, producer, (void *)&num_operations);
     }
 
-    for(int i = 0; i < operations_count; i++) {
-        fscanf(file, "%d %s %d", &operations[i].product_id, operations[i].operation_type, &operations[i].units);
+    // Launch consumer threads
+    pthread_t consumers[num_consumers];
+    for (int i = 0; i < num_consumers; i++) {
+        pthread_create(&consumers[i], NULL, consumer, NULL);
     }
 
+    // Wait for all producer threads to finish
+    for (int i = 0; i < num_producers; i++) {
+        pthread_join(producers[i], NULL);
+    }
+
+    // Wait for all consumer threads to finish
+    for (int i = 0; i < num_consumers; i++) {
+        pthread_join(consumers[i], NULL);
+    }
+
+    // Output profit and stock
+    printf("Total: %d euros\n", profits);
+    printf("Stock:\n");
+    for (int i = 0; i < 5; i++) {
+        printf("  Product %d: %d\n", i + 1, product_stock[i]);
+    }
+
+    // Destroy queue
+    queue_destroy(q);
+
+    // Close file
     fclose(file);
 
-    // Processing each operation
-    for (int i = 0; i < operations_count; i++) {
-        int product_index = operations[i].product_id - 1; // Product ID to array index (1-based to 0-based)
+    return EXIT_SUCCESS;
+}
 
-        if (strcmp(operations[i].operation_type, "PURCHASE") == 0) {
-            product_stock[product_index] += operations[i].units;
-        } else if (strcmp(operations[i].operation_type, "SALE") == 0) {
-            product_stock[product_index] -= operations[i].units;
-            profits += operations[i].units * (selling_prices[product_index] - purchase_costs[product_index]);
-        }
+void *producer(void *arg) {
+    int *num_operations = (int *)arg;
+
+    for (int i = 0; i < *num_operations; i++) {
+        char line[MAX_FILENAME_LENGTH];
+        fgets(line, MAX_FILENAME_LENGTH, stdin);
+
+        Operation *op = parse_operation(line);
+        queue_put(q, op);
     }
 
+    pthread_exit(NULL);
+}
 
-  // Output
-  printf("Total: %d euros\n", profits);
-  printf("Stock:\n");
-  printf("  Product 1: %d\n", product_stock[0]);
-  printf("  Product 2: %d\n", product_stock[1]);
-  printf("  Product 3: %d\n", product_stock[2]);
-  printf("  Product 4: %d\n", product_stock[3]);
-  printf("  Product 5: %d\n", product_stock[4]);
+void *consumer(void *arg) {
+    while (1) {
+        Operation *op = queue_get(q);
+        if (!op) break;
 
-  return 0;
+        process_operation(op);
+        free(op);
+    }
+
+    pthread_exit(NULL);
+}
+
+Operation* parse_operation(const char *line) {
+    Operation *op = (Operation *)malloc(sizeof(Operation));
+    if (!op) {
+        perror("Error allocating memory for operation");
+        exit(EXIT_FAILURE);
+    }
+
+    sscanf(line, "%d %s %d", &op->id, op->op_type, &op->units);
+    return op;
+}
+
+void process_operation(Operation *op) {
+    int product_id = op->id - 1; // Product id is 1-indexed
+    int purchase_cost, sale_price;
+
+    switch (op->op_type[0]) {
+        case 'P':
+            purchase_cost = purchase_prices[product_id] * op->units;
+            profits -= purchase_cost;
+            product_stock[product_id] += op->units;
+            break;
+        case 'S':
+            sale_price = sale_prices[product_id] * op->units;
+            profits += sale_price;
+            product_stock[product_id] -= op->units;
+            break;
+        default:
+            fprintf(stderr, "Invalid operation type\n");
+    }
 }
